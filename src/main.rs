@@ -5,8 +5,9 @@ use std::{
 
 use anyhow::Result;
 use codecrafters_http_server::{
-    response::{response_200, response_404},
-    RequestLine, RequestMethod,
+    request::{RequestLine, RequestMethod},
+    response::{HttpResponse, HttpStatus},
+    routes::Route,
 };
 
 fn main() -> Result<()> {
@@ -34,8 +35,13 @@ fn main() -> Result<()> {
 fn handle_stream(mut stream: TcpStream) -> Result<()> {
     let mut reader = BufReader::new(&stream);
     let request_line = RequestLine::parse(&mut reader)?;
-    match (request_line.method, request_line.target.as_str()) {
-        (RequestMethod::Get, "/") => response_200(&mut stream),
-        _ => response_404(&mut stream),
-    }
+
+    let response = match (request_line.method, request_line.route) {
+        (RequestMethod::Get, Route::Root) => HttpResponse::new(HttpStatus::Ok),
+        (RequestMethod::Get, Route::Echo { command }) => {
+            HttpResponse::new(HttpStatus::Ok).with_text_response(&command)
+        }
+        _ => HttpResponse::new(HttpStatus::NotFound),
+    };
+    response.output(&mut stream)
 }

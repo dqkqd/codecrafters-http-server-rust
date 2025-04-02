@@ -1,10 +1,9 @@
-mod request;
+pub mod request;
 pub mod response;
+pub mod routes;
 
 use anyhow::Result;
 use std::io::BufRead;
-
-pub use request::{RequestLine, RequestMethod};
 
 fn read_until_crlf<R: BufRead>(reader: &mut R, buf: &mut Vec<u8>) -> Result<()> {
     loop {

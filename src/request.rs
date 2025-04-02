@@ -3,6 +3,7 @@ use std::io::BufRead;
 use std::str;
 
 use crate::read_until_crlf;
+use crate::routes::Route;
 
 #[derive(Debug)]
 pub enum RequestMethod {
@@ -12,7 +13,7 @@ pub enum RequestMethod {
 #[derive(Debug)]
 pub struct RequestLine {
     pub method: RequestMethod,
-    pub target: String,
+    pub route: Route,
     version: String,
 }
 
@@ -34,15 +35,16 @@ impl RequestLine {
             _ => bail!("invalid method"),
         };
 
-        let target = chunks.next().unwrap_or_default();
-        let target = String::from_utf8(target.to_vec())?;
+        let route = chunks.next().unwrap_or_default();
+        let route = str::from_utf8(route)?;
+        let route = Route::from(route);
 
         let version = chunks.next().unwrap_or_default();
         let version = String::from_utf8(version.to_vec())?;
 
         Ok(RequestLine {
             method,
-            target,
+            route,
             version,
         })
     }
