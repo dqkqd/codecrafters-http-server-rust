@@ -1,6 +1,15 @@
-use std::{io::Write, net::TcpListener};
+use std::{
+    io::BufReader,
+    net::{TcpListener, TcpStream},
+};
 
-fn main() -> std::io::Result<()> {
+use anyhow::Result;
+use codecrafters_http_server::{
+    response::{response_200, response_404},
+    RequestLine, RequestMethod,
+};
+
+fn main() -> Result<()> {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
     println!("Logs from your program will appear here!");
 
@@ -10,9 +19,8 @@ fn main() -> std::io::Result<()> {
 
     for stream in listener.incoming() {
         match stream {
-            Ok(mut stream) => {
-                let response = "HTTP/1.1 200 OK\r\n\r\n";
-                stream.write_all(response.as_bytes())?
+            Ok(stream) => {
+                handle_stream(stream)?;
             }
             Err(e) => {
                 println!("error: {}", e);
@@ -21,4 +29,13 @@ fn main() -> std::io::Result<()> {
     }
 
     Ok(())
+}
+
+fn handle_stream(mut stream: TcpStream) -> Result<()> {
+    let mut reader = BufReader::new(&stream);
+    let request_line = RequestLine::parse(&mut reader)?;
+    match (request_line.method, request_line.target.as_str()) {
+        (RequestMethod::Get, "/") => response_200(&mut stream),
+        _ => response_404(&mut stream),
+    }
 }
