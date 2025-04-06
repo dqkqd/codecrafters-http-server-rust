@@ -1,13 +1,97 @@
 use core::str;
 
 use anyhow::Result;
-use nom::{bytes::complete::is_not, IResult};
+use nom::{
+    branch::alt,
+    bytes::{complete::is_not, tag, take_until},
+    character::complete::{crlf, space1},
+    combinator::{eof, opt},
+    sequence::{pair, preceded},
+    IResult, Parser,
+};
 
 pub(super) fn vec_u8_to_u32(i: &[u8]) -> Result<u32> {
     let v = str::from_utf8(i)?.parse()?;
     Ok(v)
 }
 
-pub(super) fn until_space1(i: &[u8]) -> IResult<&[u8], &[u8]> {
+type ParserResult<'a, T> = IResult<&'a [u8], &'a T>;
+
+pub(super) fn until_space1(i: &[u8]) -> ParserResult<[u8]> {
     is_not(" \t\r\n")(i)
+}
+
+// TODO: remove
+pub(super) fn until_crlf1(i: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
+    pair(take_until("\r\n"), crlf).parse(i)
+}
+
+pub(super) fn lws(i: &[u8]) -> ParserResult<[u8]> {
+    // LWS = [CRLF] 1*( SP | HT )
+    alt((eof, preceded(opt(tag("\r\n")), space1))).parse(i)
+}
+
+pub(super) fn many_lws(i: &[u8]) -> ParserResult<[u8; 0]> {
+    let mut i = i;
+    while !i.is_empty() {
+        match lws.parse(i) {
+            Ok(out) => i = out.0,
+            Err(_) => break,
+        }
+    }
+    Ok((i, b""))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_lws_no_crlf() -> Result<()> {
+        let (input, _) = lws(b" \t abc")?;
+        assert_eq!(input, b"abc");
+        Ok(())
+    }
+
+    #[test]
+    fn test_lws_crlf() -> Result<()> {
+        let (input, _) = lws(b"\r\n\t abc")?;
+        assert_eq!(input, b"abc");
+        Ok(())
+    }
+
+    #[test]
+    fn test_lws_empty() -> Result<()> {
+        let (input, _) = lws(b"")?;
+        assert_eq!(input, b"");
+        Ok(())
+    }
+
+    #[test]
+    fn test_lws_only_space() -> Result<()> {
+        let (input, _) = lws(b"   ")?;
+        assert_eq!(input, b"");
+        Ok(())
+    }
+
+    #[test]
+    fn test_many_lws() -> Result<()> {
+        let (input, _) = many_lws(b" \t abc")?;
+        assert_eq!(input, b"abc");
+        Ok(())
+    }
+
+    #[test]
+    fn test_many_lws_empty() -> Result<()> {
+        let (input, _) = many_lws(b"")?;
+        assert_eq!(input, b"");
+        Ok(())
+    }
+
+    #[test]
+    fn test_many_lws_only_space() -> Result<()> {
+        let (input, _) = many_lws(b"  ")?;
+        assert_eq!(input, b"");
+        Ok(())
+    }
 }
