@@ -1,15 +1,18 @@
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag_no_case, take_until},
-    character::{
-        complete::{alpha1, crlf, multispace0},
-        streaming::multispace1,
-    },
+    bytes::complete::{is_not, tag_no_case},
+    character::complete::{alpha1, crlf, space0},
     combinator::map,
+    multi::many0,
+    sequence::terminated,
     Parser,
 };
 
-use super::{protocol::HttpVersion, Parse};
+use super::{
+    message::{MessageBody, MessageHeader},
+    protocol::HttpVersion,
+    Parse,
+};
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Method {
@@ -17,8 +20,6 @@ pub(super) enum Method {
     ExtensionMethod(Vec<u8>),
 }
 
-// TODO: handle uri
-// TODO: add test
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct RequestURI(Vec<u8>);
 
@@ -27,6 +28,13 @@ pub(super) struct RequestLine {
     method: Method,
     request_uri: RequestURI,
     http_version: HttpVersion,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Request {
+    request_line: RequestLine,
+    headers: Vec<MessageHeader>,
+    body: Option<MessageBody>,
 }
 
 impl Parse for Method {
@@ -59,14 +67,13 @@ impl Parse for RequestLine {
     where
         Self: std::marker::Sized,
     {
-        let (input, (_, method, _, request_uri, _, http_version, _, _)) = (
-            multispace0,
+        let (input, (_, method, _, request_uri, _, http_version, _)) = (
+            space0,
             Method::parse,
-            multispace1,
+            space0,
             RequestURI::parse,
-            multispace1,
+            space0,
             HttpVersion::parse,
-            take_until("\r\n"),
             crlf,
         )
             .parse(i)?;
@@ -77,6 +84,35 @@ impl Parse for RequestLine {
                 method,
                 request_uri,
                 http_version,
+            },
+        ))
+    }
+}
+
+impl Parse for Request {
+    fn parse(i: &[u8]) -> nom::IResult<&[u8], Self>
+    where
+        Self: std::marker::Sized,
+    {
+        let (input, (request_line, headers, _, body)) = (
+            RequestLine::parse,
+            many0(terminated(MessageHeader::parse, crlf)),
+            crlf,
+            MessageBody::parse,
+        )
+            .parse(i)?;
+
+        let body = match !body.0.is_empty() {
+            true => Some(body),
+            false => None,
+        };
+
+        Ok((
+            input,
+            Request {
+                request_line,
+                headers,
+                body,
             },
         ))
     }
@@ -101,13 +137,20 @@ mod test {
     }
 
     #[test]
+    fn test_parse_request_uri() -> Result<()> {
+        let (_, request_uri) = RequestURI::parse(b"http://localhost")?;
+        assert_eq!(request_uri, RequestURI(b"http://localhost".to_vec()));
+
+        let (_, request_uri) = RequestURI::parse(b"http://localhost  ")?;
+        assert_eq!(request_uri, RequestURI(b"http://localhost".to_vec()));
+
+        Ok(())
+    }
+
+    #[test]
     fn test_parse_request_line() -> Result<()> {
-        let (_, request_line) = RequestLine::parse(
-            b"
-GET
-/user-agent
-HTTP/1.1\r\n",
-        )?;
+        let (_, request_line) = RequestLine::parse(b"GET /user-agent HTTP/1.1\r\n")?;
+
         assert_eq!(
             request_line,
             RequestLine {
@@ -117,19 +160,31 @@ HTTP/1.1\r\n",
             }
         );
 
-        let (_, request_line) = RequestLine::parse(
-            b"
-GET
-/user-agent
-HTTP/2.0
-\r\n",
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_request_with_body() -> Result<()> {
+        let (_, request) = Request::parse(
+            b"GET /user-agent HTTP/2.0\r
+Host: localhost:4221\r
+User-Agent: foobar/1.2.3\r
+Accept: */*\r
+\r
+message body1
+message body2",
         )?;
+
         assert_eq!(
-            request_line,
-            RequestLine {
-                method: Method::Get,
-                request_uri: RequestURI(b"/user-agent".to_vec()),
-                http_version: HttpVersion { major: 2, minor: 0 }
+            request,
+            Request {
+                request_line: RequestLine::parse(b"GET /user-agent HTTP/2.0\r\n")?.1,
+                headers: vec![
+                    MessageHeader::parse(b"Host: localhost:4221")?.1,
+                    MessageHeader::parse(b"User-Agent: foobar/1.2.3")?.1,
+                    MessageHeader::parse(b"Accept: */*")?.1,
+                ],
+                body: Some(MessageBody::parse(b"message body1\nmessage body2")?.1),
             }
         );
         Ok(())
