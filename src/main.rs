@@ -5,7 +5,6 @@ use std::{
 
 use anyhow::Result;
 use codecrafters_http_server::{
-    parser::{Parse},
     request::{RequestLine, RequestMethod},
     response::{HttpResponse, HttpStatus},
     routes::Route,

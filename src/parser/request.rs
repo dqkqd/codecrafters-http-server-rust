@@ -1,17 +1,15 @@
-use nom::{
-    branch::alt,
-    bytes::complete::{is_not, tag_no_case},
-    character::complete::{alpha1, crlf, space0},
-    combinator::map,
-    multi::many0,
-    sequence::terminated,
+use winnow::{
+    ascii::{alpha1, crlf, space0, Caseless},
+    combinator::{alt, repeat, seq, terminated},
+    token::take_till,
     Parser,
 };
 
 use super::{
+    base::Parse,
     message::{MessageBody, MessageHeader},
     protocol::HttpVersion,
-    Parse,
+    util::is_space,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -38,155 +36,255 @@ pub struct Request {
 }
 
 impl Parse for Method {
-    fn parse(i: &[u8]) -> nom::IResult<&[u8], Self>
+    fn parse<'i, I>(input: &mut I) -> winnow::ModalResult<Self>
     where
         Self: std::marker::Sized,
+        I: super::base::Convertible<'i>,
+        I::Token: winnow::stream::AsChar,
     {
-        alt((
-            map(tag_no_case("get"), |_: &[u8]| Method::Get),
-            map(alpha1, |m: &[u8]| Method::ExtensionMethod(m.to_vec())),
+        let method: Method = alt((
+            Caseless("get").map(|_| Method::Get),
+            alpha1.map(|m: &[u8]| Method::ExtensionMethod(m.to_vec())),
         ))
-        .parse(i)
+        .parse_next(input)?;
+        Ok(method)
     }
 }
 
 impl Parse for RequestURI {
-    fn parse(i: &[u8]) -> nom::IResult<&[u8], Self>
+    fn parse<'i, I>(input: &mut I) -> winnow::ModalResult<Self>
     where
         Self: std::marker::Sized,
+        I: super::base::Convertible<'i>,
+        I::Token: winnow::stream::AsChar,
     {
-        map(is_not(" \t\r\n"), |request_uri: &[u8]| {
-            RequestURI(request_uri.to_vec())
-        })
-        .parse(i)
+        let uri = take_till(1.., is_space)
+            .map(|uri: &[u8]| RequestURI(uri.to_vec()))
+            .parse_next(input)?;
+        Ok(uri)
     }
 }
 
 impl Parse for RequestLine {
-    fn parse(i: &[u8]) -> nom::IResult<&[u8], Self>
+    fn parse<'i, I>(input: &mut I) -> winnow::ModalResult<Self>
     where
         Self: std::marker::Sized,
+        I: super::base::Convertible<'i>,
+        I::Token: winnow::stream::AsChar,
     {
-        let (input, (_, method, _, request_uri, _, http_version, _)) = (
-            space0,
-            Method::parse,
-            space0,
-            RequestURI::parse,
-            space0,
-            HttpVersion::parse,
-            crlf,
-        )
-            .parse(i)?;
+        let request_line = seq! {RequestLine {
+            _: space0,
+            method: Method::parse,
+            _: space0,
+            request_uri: RequestURI::parse,
+            _: space0,
+            http_version: HttpVersion::parse,
+            _: space0,
+            _: "\r\n",
 
-        Ok((
-            input,
-            RequestLine {
-                method,
-                request_uri,
-                http_version,
-            },
-        ))
+        }}
+        .parse_next(input)?;
+        Ok(request_line)
     }
 }
 
 impl Parse for Request {
-    fn parse(i: &[u8]) -> nom::IResult<&[u8], Self>
+    fn parse<'i, I>(input: &mut I) -> winnow::ModalResult<Self>
     where
         Self: std::marker::Sized,
+        I: super::base::Convertible<'i>,
+        I::Token: winnow::stream::AsChar,
     {
-        let (input, (request_line, headers, _, body)) = (
-            RequestLine::parse,
-            many0(terminated(MessageHeader::parse, crlf)),
-            crlf,
-            MessageBody::parse,
-        )
-            .parse(i)?;
-
-        let body = match !body.0.is_empty() {
-            true => Some(body),
-            false => None,
-        };
-
-        Ok((
-            input,
+        let request = seq! {
             Request {
-                request_line,
-                headers,
-                body,
-            },
-        ))
+                request_line: RequestLine::parse,
+                headers: repeat(0.., terminated(MessageHeader::parse, crlf)),
+                _: crlf,
+                body: MessageBody::parse.map(|body| {
+                    if !body.0.is_empty() {
+                        Some(body)
+                    } else {
+                        None
+                    }
+                }),
+            }
+        }
+        .parse_next(input)?;
+        Ok(request)
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::{
+        test_parse_ok,
+        parser::message::{FieldContent, FieldName, FieldValue},
+    };
+
     use super::*;
-    use anyhow::Result;
 
-    #[test]
-    fn test_parse_method() -> Result<()> {
-        let (_, method) = Method::parse(b"get")?;
-        assert_eq!(method, Method::Get);
+    test_parse_ok!(get, b"get", Method::Get, b"");
+    test_parse_ok!(get_case, b"Get", Method::Get, b"");
+    test_parse_ok!(get_trailing, b"get ", Method::Get, b" ");
+    test_parse_ok!(
+        get_extension,
+        b"Something",
+        Method::ExtensionMethod(b"Something".to_vec()),
+        b""
+    );
+    test_parse_ok!(
+        get_extension_trailing,
+        b"Something ",
+        Method::ExtensionMethod(b"Something".to_vec()),
+        b" "
+    );
 
-        let (_, method) = Method::parse(b"Get ")?;
-        assert_eq!(method, Method::Get);
+    test_parse_ok!(
+        request_uri,
+        b"http://localhost",
+        RequestURI(b"http://localhost".to_vec()),
+        b""
+    );
+    test_parse_ok!(
+        request_uri_trailing,
+        b"http://localhost ",
+        RequestURI(b"http://localhost".to_vec()),
+        b" "
+    );
+    test_parse_ok!(
+        request_uri_crlf,
+        b"http://localhost\r\n",
+        RequestURI(b"http://localhost".to_vec()),
+        b"\r\n"
+    );
 
-        let (_, method) = Method::parse(b"Something ")?;
-        assert_eq!(method, Method::ExtensionMethod(b"Something".to_vec()));
-        Ok(())
-    }
+    test_parse_ok!(
+        request_line,
+        b"GET /user-agent HTTP/1.1\r\n",
+        RequestLine {
+            method: Method::Get,
+            request_uri: RequestURI(b"/user-agent".to_vec()),
+            http_version: HttpVersion { major: 1, minor: 1 }
+        },
+        b""
+    );
+    test_parse_ok!(
+        request_line_leading,
+        b"  \tGET /user-agent HTTP/1.1\r\n",
+        RequestLine {
+            method: Method::Get,
+            request_uri: RequestURI(b"/user-agent".to_vec()),
+            http_version: HttpVersion { major: 1, minor: 1 }
+        },
+        b""
+    );
+    test_parse_ok!(
+        request_line_trailing,
+        b"GET /user-agent HTTP/1.1  \t\r\n",
+        RequestLine {
+            method: Method::Get,
+            request_uri: RequestURI(b"/user-agent".to_vec()),
+            http_version: HttpVersion { major: 1, minor: 1 }
+        },
+        b""
+    );
 
-    #[test]
-    fn test_parse_request_uri() -> Result<()> {
-        let (_, request_uri) = RequestURI::parse(b"http://localhost")?;
-        assert_eq!(request_uri, RequestURI(b"http://localhost".to_vec()));
-
-        let (_, request_uri) = RequestURI::parse(b"http://localhost  ")?;
-        assert_eq!(request_uri, RequestURI(b"http://localhost".to_vec()));
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_request_line() -> Result<()> {
-        let (_, request_line) = RequestLine::parse(b"GET /user-agent HTTP/1.1\r\n")?;
-
-        assert_eq!(
-            request_line,
-            RequestLine {
-                method: Method::Get,
-                request_uri: RequestURI(b"/user-agent".to_vec()),
-                http_version: HttpVersion { major: 1, minor: 1 }
-            }
-        );
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_parse_request_with_body() -> Result<()> {
-        let (_, request) = Request::parse(
-            b"GET /user-agent HTTP/2.0\r
+    test_parse_ok!(
+        request,
+        b"GET /user-agent HTTP/2.0\r
 Host: localhost:4221\r
 User-Agent: foobar/1.2.3\r
 Accept: */*\r
 \r
 message body1
 message body2",
-        )?;
-
-        assert_eq!(
-            request,
-            Request {
-                request_line: RequestLine::parse(b"GET /user-agent HTTP/2.0\r\n")?.1,
-                headers: vec![
-                    MessageHeader::parse(b"Host: localhost:4221")?.1,
-                    MessageHeader::parse(b"User-Agent: foobar/1.2.3")?.1,
-                    MessageHeader::parse(b"Accept: */*")?.1,
-                ],
-                body: Some(MessageBody::parse(b"message body1\nmessage body2")?.1),
-            }
-        );
-        Ok(())
-    }
+        Request {
+            request_line: RequestLine {
+                method: Method::Get,
+                request_uri: RequestURI(b"/user-agent".to_vec()),
+                http_version: HttpVersion { major: 2, minor: 0 },
+            },
+            headers: vec![
+                MessageHeader {
+                    field_name: FieldName(b"Host".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"localhost:4221".to_vec())])),
+                },
+                MessageHeader {
+                    field_name: FieldName(b"User-Agent".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"foobar/1.2.3".to_vec())])),
+                },
+                MessageHeader {
+                    field_name: FieldName(b"Accept".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"*/*".to_vec())])),
+                },
+            ],
+            body: Some(MessageBody(b"message body1\nmessage body2".to_vec())),
+        },
+        b""
+    );
+    test_parse_ok!(
+        request_no_header,
+        b"GET /user-agent HTTP/2.0\r
+\r
+message body1
+message body2",
+        Request {
+            request_line: RequestLine {
+                method: Method::Get,
+                request_uri: RequestURI(b"/user-agent".to_vec()),
+                http_version: HttpVersion { major: 2, minor: 0 },
+            },
+            headers: vec![],
+            body: Some(MessageBody(b"message body1\nmessage body2".to_vec())),
+        },
+        b""
+    );
+    test_parse_ok!(
+        request_no_body,
+        b"GET /user-agent HTTP/2.0\r
+Host: localhost:4221\r
+User-Agent: foobar/1.2.3\r
+Accept: */*\r
+\r
+",
+        Request {
+            request_line: RequestLine {
+                method: Method::Get,
+                request_uri: RequestURI(b"/user-agent".to_vec()),
+                http_version: HttpVersion { major: 2, minor: 0 },
+            },
+            headers: vec![
+                MessageHeader {
+                    field_name: FieldName(b"Host".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"localhost:4221".to_vec())])),
+                },
+                MessageHeader {
+                    field_name: FieldName(b"User-Agent".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"foobar/1.2.3".to_vec())])),
+                },
+                MessageHeader {
+                    field_name: FieldName(b"Accept".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"*/*".to_vec())])),
+                },
+            ],
+            body: None,
+        },
+        b""
+    );
+    test_parse_ok!(
+        request_no_header_and_body,
+        b"GET /user-agent HTTP/2.0\r
+\r
+",
+        Request {
+            request_line: RequestLine {
+                method: Method::Get,
+                request_uri: RequestURI(b"/user-agent".to_vec()),
+                http_version: HttpVersion { major: 2, minor: 0 },
+            },
+            headers: vec![],
+            body: None,
+        },
+        b""
+    );
 }

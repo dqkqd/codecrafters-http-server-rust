@@ -1,4 +1,4 @@
-pub mod parser;
+mod parser;
 pub mod request;
 pub mod response;
 pub mod routes;

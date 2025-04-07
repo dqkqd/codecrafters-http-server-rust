@@ -1,92 +1,42 @@
-use core::str;
+use winnow::{ascii::space0, combinator::opt, stream::AsChar, Parser};
 
-use anyhow::Result;
-use nom::{
-    branch::alt,
-    bytes::{complete::is_not, tag},
-    character::complete::space1,
-    combinator::{eof, opt},
-    sequence::preceded,
-    IResult, Parser,
-};
+use super::base::Parse;
 
-pub(super) fn vec_u8_to_u32(i: &[u8]) -> Result<u32> {
-    let v = str::from_utf8(i)?.parse()?;
-    Ok(v)
+pub(super) fn is_space<T: AsChar>(c: T) -> bool {
+    " \t\r\n".contains(c.as_char())
 }
 
-type ParserResult<'a, T> = IResult<&'a [u8], &'a T>;
+#[derive(Debug, PartialEq, Eq)]
+struct Lws(Vec<u8>);
+impl Parse for Lws {
+    fn parse<'i, I>(input: &mut I) -> winnow::ModalResult<Self>
+    where
+        Self: std::marker::Sized,
+        I: super::base::Convertible<'i>,
+        I::Token: AsChar,
+    {
+        // LWS = [CRLF] 1*( SP | HT )
+        let mut lws = vec![];
 
-pub(super) fn until_space1(i: &[u8]) -> ParserResult<[u8]> {
-    is_not(" \t\r\n")(i)
-}
-
-pub(super) fn lws(i: &[u8]) -> ParserResult<[u8]> {
-    // LWS = [CRLF] 1*( SP | HT )
-    alt((eof, preceded(opt(tag("\r\n")), space1))).parse(i)
-}
-
-pub(super) fn many_lws(i: &[u8]) -> ParserResult<[u8; 0]> {
-    let mut i = i;
-    while !i.is_empty() {
-        match lws.parse(i) {
-            Ok(out) => i = out.0,
-            Err(_) => break,
+        if let Some(out) = opt("\r\n").parse_next(input)? {
+            lws.extend_from_slice(out);
         }
+        let out = space0.parse_next(input)?;
+        lws.extend_from_slice(out);
+
+        Ok(Lws(lws))
     }
-    Ok((i, b""))
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test_parse_ok;
 
-    #[test]
-    fn test_lws_no_crlf() -> Result<()> {
-        let (input, _) = lws(b" \t abc")?;
-        assert_eq!(input, b"abc");
-        Ok(())
-    }
-
-    #[test]
-    fn test_lws_crlf() -> Result<()> {
-        let (input, _) = lws(b"\r\n\t abc")?;
-        assert_eq!(input, b"abc");
-        Ok(())
-    }
-
-    #[test]
-    fn test_lws_empty() -> Result<()> {
-        let (input, _) = lws(b"")?;
-        assert_eq!(input, b"");
-        Ok(())
-    }
-
-    #[test]
-    fn test_lws_only_space() -> Result<()> {
-        let (input, _) = lws(b"   ")?;
-        assert_eq!(input, b"");
-        Ok(())
-    }
-
-    #[test]
-    fn test_many_lws() -> Result<()> {
-        let (input, _) = many_lws(b" \t abc")?;
-        assert_eq!(input, b"abc");
-        Ok(())
-    }
-
-    #[test]
-    fn test_many_lws_empty() -> Result<()> {
-        let (input, _) = many_lws(b"")?;
-        assert_eq!(input, b"");
-        Ok(())
-    }
-
-    #[test]
-    fn test_many_lws_only_space() -> Result<()> {
-        let (input, _) = many_lws(b"  ")?;
-        assert_eq!(input, b"");
-        Ok(())
-    }
+    test_parse_ok!(lws_no_crlf, b" \t abc", Lws(b" \t ".to_vec()), b"abc");
+    test_parse_ok!(lws_crlf, b"\r\n\t abc", Lws(b"\r\n\t ".to_vec()), b"abc");
+    test_parse_ok!(lws_empty, b"", Lws(b"".to_vec()), b"");
+    test_parse_ok!(lws_only_space, b"    ", Lws(b"    ".to_vec()), b"");
+    test_parse_ok!(lws_only_crlf, b"\r\n", Lws(b"\r\n".to_vec()), b"");
+    test_parse_ok!(lws_only_cr, b"\r", Lws(b"".to_vec()), b"\r");
 }
