@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag_no_case},
-    character::complete::{alpha1, crlf, space0},
+    bytes::streaming::{is_not, tag, tag_no_case},
+    character::streaming::{alpha1, space0},
     combinator::map,
     multi::many0,
     sequence::terminated,
@@ -67,14 +67,15 @@ impl Parse for RequestLine {
     where
         Self: std::marker::Sized,
     {
-        let (input, (_, method, _, request_uri, _, http_version, _)) = (
+        let (input, (_, method, _, request_uri, _, http_version, _, _)) = (
             space0,
             Method::parse,
             space0,
             RequestURI::parse,
             space0,
             HttpVersion::parse,
-            crlf,
+            space0,
+            tag("\r\n"),
         )
             .parse(i)?;
 
@@ -94,13 +95,28 @@ impl Parse for Request {
     where
         Self: std::marker::Sized,
     {
+        let (input, (request_line)) = (
+            RequestLine::parse,
+            // TODO: header with spaces
+            // many0(terminated(MessageHeader::parse, tag("\r\n"))),
+            // tag("\r\n"),
+            // MessageBody::parse,
+        )
+            .parse(i)?;
+        dbg!(String::from_utf8(input.to_vec()).unwrap(), request_line);
+        let (input, v) = many0(MessageHeader::parse).parse(input)?;
+        dbg!(String::from_utf8(input.to_vec()).unwrap(), v);
+
         let (input, (request_line, headers, _, body)) = (
             RequestLine::parse,
-            many0(terminated(MessageHeader::parse, crlf)),
-            crlf,
+            // TODO: header with spaces
+            many0(terminated(MessageHeader::parse, tag("\r\n"))),
+            tag("\r\n"),
             MessageBody::parse,
         )
             .parse(i)?;
+        dbg!(input);
+        todo!();
 
         let body = match !body.0.is_empty() {
             true => Some(body),
@@ -120,28 +136,35 @@ impl Parse for Request {
 
 #[cfg(test)]
 mod test {
+    use crate::parser::test::TestParserStream;
+
     use super::*;
     use anyhow::Result;
 
     #[test]
     fn test_parse_method() -> Result<()> {
-        let (_, method) = Method::parse(b"get")?;
+        let mut p = TestParserStream::init(b"get");
+        let method: Method = p.parse()?;
         assert_eq!(method, Method::Get);
 
-        let (_, method) = Method::parse(b"Get ")?;
+        let mut p = TestParserStream::init(b"Get ");
+        let method: Method = p.parse()?;
         assert_eq!(method, Method::Get);
 
-        let (_, method) = Method::parse(b"Something ")?;
+        let mut p = TestParserStream::init(b"Something ");
+        let method: Method = p.parse()?;
         assert_eq!(method, Method::ExtensionMethod(b"Something".to_vec()));
         Ok(())
     }
 
     #[test]
     fn test_parse_request_uri() -> Result<()> {
-        let (_, request_uri) = RequestURI::parse(b"http://localhost")?;
+        let mut p = TestParserStream::init(b"http://localhost ");
+        let request_uri: RequestURI = p.parse()?;
         assert_eq!(request_uri, RequestURI(b"http://localhost".to_vec()));
 
-        let (_, request_uri) = RequestURI::parse(b"http://localhost  ")?;
+        let mut p = TestParserStream::init(b"http://localhost\r\n");
+        let request_uri: RequestURI = p.parse()?;
         assert_eq!(request_uri, RequestURI(b"http://localhost".to_vec()));
 
         Ok(())
@@ -149,8 +172,8 @@ mod test {
 
     #[test]
     fn test_parse_request_line() -> Result<()> {
-        let (_, request_line) = RequestLine::parse(b"GET /user-agent HTTP/1.1\r\n")?;
-
+        let mut p = TestParserStream::init(b"GET /user-agent HTTP/1.1\r\n");
+        let request_line: RequestLine = p.parse()?;
         assert_eq!(
             request_line,
             RequestLine {
@@ -159,7 +182,52 @@ mod test {
                 http_version: HttpVersion { major: 1, minor: 1 }
             }
         );
+        Ok(())
+    }
 
+    #[test]
+    fn test_parse_request_line_leading() -> Result<()> {
+        let mut p = TestParserStream::init(b" \tGET /user-agent HTTP/1.1\r\n");
+        let request_line: RequestLine = p.parse()?;
+        assert_eq!(
+            request_line,
+            RequestLine {
+                method: Method::Get,
+                request_uri: RequestURI(b"/user-agent".to_vec()),
+                http_version: HttpVersion { major: 1, minor: 1 }
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_request_line_trailing() -> Result<()> {
+        let mut p = TestParserStream::init(b"GET /user-agent HTTP/1.1 \t\r\n");
+        let request_line: RequestLine = p.parse()?;
+        assert_eq!(
+            request_line,
+            RequestLine {
+                method: Method::Get,
+                request_uri: RequestURI(b"/user-agent".to_vec()),
+                http_version: HttpVersion { major: 1, minor: 1 }
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_request_only_request_line() -> Result<()> {
+        let mut p = TestParserStream::init(b"GET /user-agent HTTP/2.0\r\n\r\n");
+        let request: Request = p.parse()?;
+
+        assert_eq!(
+            request,
+            Request {
+                request_line: RequestLine::parse(b"GET /user-agent HTTP/2.0\r\n")?.1,
+                headers: vec![MessageHeader::parse(b"Host: localhost:4221")?.1,],
+                body: None,
+            }
+        );
         Ok(())
     }
 

@@ -1,6 +1,6 @@
 use nom::{
-    bytes::complete::tag,
-    character::complete::{char, digit1},
+    bytes::streaming::tag,
+    character::streaming::{char, digit1},
     combinator::map_res,
     Parser,
 };
@@ -31,12 +31,15 @@ impl Parse for HttpVersion {
 
 #[cfg(test)]
 mod test {
+    use crate::parser::test::TestParserStream;
+
     use super::*;
     use anyhow::Result;
 
     #[test]
     fn test_parse_http_version() -> Result<()> {
-        let (_, http_version) = HttpVersion::parse(b"HTTP/1.0")?;
+        let mut p = TestParserStream::init(b"HTTP/1.0 ");
+        let http_version: HttpVersion = p.parse()?;
         assert_eq!(http_version, HttpVersion { major: 1, minor: 0 });
         Ok(())
     }

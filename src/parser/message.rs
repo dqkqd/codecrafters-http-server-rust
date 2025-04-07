@@ -1,6 +1,6 @@
 use nom::{
-    bytes::complete::take_until1,
-    character::complete::char,
+    bytes::streaming::take_until1,
+    character::{complete::char, streaming::space0},
     combinator::{map, opt, rest},
     multi::many0,
     sequence::{delimited, preceded, terminated},
@@ -57,9 +57,9 @@ impl Parse for FieldValue {
     where
         Self: std::marker::Sized,
     {
-        let field_contents = many0(terminated(FieldContent::parse, many_lws));
+        let field_contents = many0(terminated(FieldContent::parse, space0));
         let field_contents = map(opt(field_contents), |c| c.unwrap_or_default());
-        map(delimited(many_lws, field_contents, many_lws), FieldValue).parse(i)
+        map(delimited(space0, field_contents, space0), FieldValue).parse(i)
     }
 }
 
@@ -97,53 +97,55 @@ impl Parse for MessageBody {
 
 #[cfg(test)]
 mod test {
+    use crate::parser::test::TestParserStream;
+
     use super::*;
     use anyhow::Result;
 
     #[test]
     fn test_parse_field_name() -> Result<()> {
-        let (_, field_name) = FieldName::parse(b"Content-Type: 3\r\n")?;
+        let mut p = TestParserStream::init(b"Content-Type: 3\r\n");
+        let field_name: FieldName = p.parse()?;
         assert_eq!(field_name, FieldName(b"Content-Type".to_vec()));
         Ok(())
     }
 
     #[test]
     fn test_parse_field_name_leading() -> Result<()> {
-        let (_, field_name) = FieldName::parse(b" Content-Type: 3\r\n")?;
+        let mut p = TestParserStream::init(b" Content-Type: 3\r\n");
+        let field_name: FieldName = p.parse()?;
         assert_eq!(field_name, FieldName(b"Content-Type".to_vec()));
         Ok(())
     }
 
     #[test]
     fn test_parse_field_name_trailing() -> Result<()> {
-        let (_, field_name) = FieldName::parse(b"Content-Type \t: 3\r\n")?;
+        let mut p = TestParserStream::init(b"Content-Type \t: 3\r\n");
+        let field_name: FieldName = p.parse()?;
         assert_eq!(field_name, FieldName(b"Content-Type".to_vec()));
         Ok(())
     }
 
     #[test]
     fn test_parse_field_content() -> Result<()> {
-        let (_, field_content) = FieldContent::parse(b"ab")?;
+        let mut p = TestParserStream::init(b"ab\r\n");
+        let field_content: FieldContent = p.parse()?;
         assert_eq!(field_content, FieldContent(b"ab".to_vec()));
         Ok(())
     }
 
     #[test]
-    fn test_parse_field_content_empty() -> Result<()> {
-        assert!(FieldContent::parse(b"").is_err());
-        Ok(())
-    }
-
-    #[test]
     fn test_parse_field_content_trailing() -> Result<()> {
-        let (_, field_content) = FieldContent::parse(b"ab ")?;
+        let mut p = TestParserStream::init(b"ab ");
+        let field_content: FieldContent = p.parse()?;
         assert_eq!(field_content, FieldContent(b"ab".to_vec()));
         Ok(())
     }
 
     #[test]
     fn test_parse_field_value() -> Result<()> {
-        let (_, field_value) = FieldValue::parse(b"ab  \tcd")?;
+        let mut p = TestParserStream::init(b"ab  \tcd\r\n");
+        let field_value: FieldValue = p.parse()?;
         assert_eq!(
             field_value,
             FieldValue(vec![
@@ -156,7 +158,8 @@ mod test {
 
     #[test]
     fn test_parse_field_value_leading() -> Result<()> {
-        let (_, field_value) = FieldValue::parse(b"  ab  \tcd")?;
+        let mut p = TestParserStream::init(b"  ab  \tcd\r\n");
+        let field_value: FieldValue = p.parse()?;
         assert_eq!(
             field_value,
             FieldValue(vec![
@@ -169,7 +172,8 @@ mod test {
 
     #[test]
     fn test_parse_field_value_trailing() -> Result<()> {
-        let (_, field_value) = FieldValue::parse(b"  ab  \tcd   \r\n")?;
+        let mut p = TestParserStream::init(b"  ab  \tcd   \r\n");
+        let field_value: FieldValue = p.parse()?;
         assert_eq!(
             field_value,
             FieldValue(vec![
@@ -182,14 +186,16 @@ mod test {
 
     #[test]
     fn test_parse_field_value_empty() -> Result<()> {
-        let (_, field_value) = FieldValue::parse(b"")?;
+        let mut p = TestParserStream::init(b"\r\n");
+        let field_value: FieldValue = p.parse()?;
         assert_eq!(field_value, FieldValue(vec![]));
         Ok(())
     }
 
     #[test]
     fn test_parse_field_value_only_space() -> Result<()> {
-        let (_, field_value) = FieldValue::parse(b"  ")?;
+        let mut p = TestParserStream::init(b"  \r\n");
+        let field_value: FieldValue = p.parse()?;
         assert_eq!(field_value, FieldValue(vec![]));
         Ok(())
     }
@@ -203,8 +209,8 @@ mod test {
 
     #[test]
     fn test_parse_message_header() -> Result<()> {
-        let (_, message_header) = MessageHeader::parse(b"Content-Length: 3 4 5")?;
-
+        let mut p = TestParserStream::init(b"Content-Length: 3 4 5\r\n");
+        let message_header: MessageHeader = p.parse()?;
         assert_eq!(
             message_header,
             MessageHeader {
@@ -222,8 +228,8 @@ mod test {
 
     #[test]
     fn test_parse_message_header_leading() -> Result<()> {
-        let (_, message_header) = MessageHeader::parse(b"  Content-Length: 3 4 5")?;
-
+        let mut p = TestParserStream::init(b"  Content-Length: 3 4 5\r\n");
+        let message_header: MessageHeader = p.parse()?;
         assert_eq!(
             message_header,
             MessageHeader {
@@ -241,8 +247,8 @@ mod test {
 
     #[test]
     fn test_parse_message_header_empty_value() -> Result<()> {
-        let (_, message_header) = MessageHeader::parse(b"Content-Length: ")?;
-
+        let mut p = TestParserStream::init(b"Content-Length: \r\n");
+        let message_header: MessageHeader = p.parse()?;
         assert_eq!(
             message_header,
             MessageHeader {
@@ -256,14 +262,18 @@ mod test {
 
     #[test]
     fn test_parse_body() -> Result<()> {
-        let (_, body) = MessageBody::parse(b"one two three")?;
+        let mut p = TestParserStream::init(b"one two three");
+        p.fill_all()?;
+        let body: MessageBody = p.parse_complete()?;
         assert_eq!(body, MessageBody(b"one two three".to_vec()));
         Ok(())
     }
 
     #[test]
     fn test_parse_body_empty() -> Result<()> {
-        let (_, body) = MessageBody::parse(b"")?;
+        let mut p = TestParserStream::init(b"");
+        p.fill_all()?;
+        let body: MessageBody = p.parse_complete()?;
         assert_eq!(body, MessageBody(b"".to_vec()));
         Ok(())
     }
