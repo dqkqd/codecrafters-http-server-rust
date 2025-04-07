@@ -1,4 +1,9 @@
-use nom::{bytes::complete::tag, character::complete::digit1, combinator::map_res, Parser};
+use nom::{
+    bytes::complete::tag,
+    character::complete::{char, digit1},
+    combinator::map_res,
+    Parser,
+};
 
 use super::{util::vec_u8_to_u32, Parse};
 
@@ -13,12 +18,13 @@ impl Parse for HttpVersion {
     where
         Self: std::marker::Sized,
     {
-        let http = tag("HTTP/");
-        let major = map_res(digit1, vec_u8_to_u32);
-        let dot = tag(".");
-        let minor = map_res(digit1, vec_u8_to_u32);
-
-        let (input, (_, major, _, minor)) = (http, major, dot, minor).parse(i)?;
+        let (input, (_, major, _, minor)) = (
+            tag("HTTP/"),
+            map_res(digit1, vec_u8_to_u32),
+            char('.'),
+            map_res(digit1, vec_u8_to_u32),
+        )
+            .parse(i)?;
         Ok((input, HttpVersion { major, minor }))
     }
 }
