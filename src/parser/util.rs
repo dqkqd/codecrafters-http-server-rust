@@ -2,10 +2,9 @@ use core::str;
 
 use anyhow::Result;
 use nom::{
-    branch::alt,
-    bytes::{complete::is_not, tag},
-    character::complete::space1,
-    combinator::{eof, opt},
+    bytes::{streaming::is_not, tag},
+    character::streaming::space1,
+    combinator::opt,
     sequence::preceded,
     IResult, Parser,
 };
@@ -23,7 +22,16 @@ pub(super) fn until_space1(i: &[u8]) -> ParserResult<[u8]> {
 
 pub(super) fn lws(i: &[u8]) -> ParserResult<[u8]> {
     // LWS = [CRLF] 1*( SP | HT )
-    alt((eof, preceded(opt(tag("\r\n")), space1))).parse(i)
+    let mut lws = preceded(
+        opt(tag::<&str, &[u8], nom::error::Error<&[u8]>>("\r\n")),
+        space1,
+    );
+    match lws.parse(i) {
+        Ok((i, out)) => Ok((i, out)),
+        // all input is consumed
+        Err(nom::Err::Incomplete(nom::Needed::Size(_))) => Ok((b"", i)),
+        e => e,
+    }
 }
 
 pub(super) fn many_lws(i: &[u8]) -> ParserResult<[u8; 0]> {
