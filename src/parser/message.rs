@@ -9,14 +9,8 @@ use nom::{
 
 use super::{
     util::{many_lws, until_space1},
-    Parse, Request, Response,
+    Parse,
 };
-
-#[derive(Debug)]
-enum HttpMessage {
-    Request(Request),
-    Response(Response),
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct MessageHeader {

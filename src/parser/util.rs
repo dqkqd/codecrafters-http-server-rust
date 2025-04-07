@@ -3,10 +3,10 @@ use core::str;
 use anyhow::Result;
 use nom::{
     branch::alt,
-    bytes::{complete::is_not, tag, take_until},
-    character::complete::{crlf, space1},
+    bytes::{complete::is_not, tag},
+    character::complete::space1,
     combinator::{eof, opt},
-    sequence::{pair, preceded},
+    sequence::preceded,
     IResult, Parser,
 };
 
@@ -19,11 +19,6 @@ type ParserResult<'a, T> = IResult<&'a [u8], &'a T>;
 
 pub(super) fn until_space1(i: &[u8]) -> ParserResult<[u8]> {
     is_not(" \t\r\n")(i)
-}
-
-// TODO: remove
-pub(super) fn until_crlf1(i: &[u8]) -> IResult<&[u8], (&[u8], &[u8])> {
-    pair(take_until("\r\n"), crlf).parse(i)
 }
 
 pub(super) fn lws(i: &[u8]) -> ParserResult<[u8]> {

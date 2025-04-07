@@ -1,5 +1,4 @@
-// mod model;
-mod parser;
+pub mod parser;
 pub mod request;
 pub mod response;
 pub mod routes;

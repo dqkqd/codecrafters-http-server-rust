@@ -31,7 +31,7 @@ pub(super) struct RequestLine {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(super) struct Request {
+pub struct Request {
     request_line: RequestLine,
     headers: Vec<MessageHeader>,
     body: Option<MessageBody>,
