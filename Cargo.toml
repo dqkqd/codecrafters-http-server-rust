@@ -7,5 +7,5 @@ rust-version = "1.80"
 
 [dependencies]
 anyhow = "1.0.68"                                # error handling
-nom = "8.0.0"
 thiserror = "1.0.38"                             # error handling
+winnow = "0.7.6"
