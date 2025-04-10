@@ -1,6 +1,6 @@
 use winnow::{
     ascii::space0,
-    combinator::{alt, preceded},
+    combinator::{alt, preceded, repeat},
     stream::AsChar,
     token::{rest, take_till, take_until},
     Parser,
@@ -31,8 +31,8 @@ use super::base::Parse;
 // }
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct FieldName(pub Vec<u8>);
-// #[derive(Debug, PartialEq, Eq)]
-// pub(super) struct FieldValue(pub Vec<FieldContent>);
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct FieldValue(pub Vec<FieldContent>);
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct FieldContent(pub Vec<u8>);
 //
@@ -64,23 +64,39 @@ impl Parse for FieldContent {
         I: super::base::Convertible<'i>,
         I::Token: winnow::stream::AsChar,
     {
+        dbg!("??");
         let field_content = alt((take_till(0.., is_space), rest))
             .map(|field_content: &[u8]| FieldContent(field_content.to_vec()))
             .parse_next(input)?;
+        dbg!(&field_content);
         Ok(field_content)
     }
 }
-//
-// impl Parse for FieldValue {
-//     fn parse(i: &[u8]) -> nom::IResult<&[u8], Self>
-//     where
-//         Self: std::marker::Sized,
-//     {
-//         let field_contents = many0(terminated(FieldContent::parse, space0));
-//         let field_contents = map(opt(field_contents), |c| c.unwrap_or_default());
-//         map(delimited(space0, field_contents, space0), FieldValue).parse(i)
-//     }
-// }
+
+impl Parse for FieldValue {
+    fn parse<'i, I>(input: &mut I) -> winnow::ModalResult<Self>
+    where
+        Self: std::marker::Sized,
+        I: super::base::Convertible<'i>,
+        I::Token: AsChar,
+    {
+        let field_contents: Vec<FieldContent> =
+            repeat(0.., FieldContent::parse).parse_next(input)?;
+
+        // let field_contents: Vec<FieldContent> =
+        //     repeat(0.., FieldContent::parse).parse_peek(input)?;
+        dbg!(field_contents);
+        todo!();
+    }
+    //     fn parse(i: &[u8]) -> nom::IResult<&[u8], Self>
+    //     where
+    //         Self: std::marker::Sized,
+    //     {
+    //         let field_contents = many0(terminated(FieldContent::parse, space0));
+    //         let field_contents = map(opt(field_contents), |c| c.unwrap_or_default());
+    //         map(delimited(space0, field_contents, space0), FieldValue).parse(i)
+    //     }
+}
 //
 // impl Parse for MessageHeader {
 //     fn parse(i: &[u8]) -> nom::IResult<&[u8], Self>
@@ -165,20 +181,26 @@ mod test {
         assert_eq!(p.complete_buffer(), b" ");
         Ok(())
     }
-    //
-    //     #[test]
-    //     fn test_parse_field_value() -> Result<()> {
-    //         let mut p = TestParserStream::init(b"ab  \tcd\r\n");
-    //         let field_value: FieldValue = p.parse()?;
-    //         assert_eq!(
-    //             field_value,
-    //             FieldValue(vec![
-    //                 FieldContent(b"ab".to_vec()),
-    //                 FieldContent(b"cd".to_vec())
-    //             ])
-    //         );
-    //         Ok(())
-    //     }
+
+    #[test]
+    fn test_parse_field_value() -> Result<()> {
+        let mut p = StreamParser::new(&b"ab  \tcd\r\n"[..]);
+
+        let field_value: FieldValue = p.parse()?;
+        // assert_eq!(field_value, (b"ab".to_vec()));
+        // assert_eq!(p.complete_buffer(), b" ");
+
+        // let mut p = TestParserStream::init(b"ab  \tcd\r\n");
+        // let field_value: FieldValue = p.parse()?;
+        // assert_eq!(
+        //     field_value,
+        //     FieldValue(vec![
+        //         FieldContent(b"ab".to_vec()),
+        //         FieldContent(b"cd".to_vec())
+        //     ])
+        // );
+        Ok(())
+    }
     //
     //     #[test]
     //     fn test_parse_field_value_leading() -> Result<()> {
