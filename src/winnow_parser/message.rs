@@ -69,16 +69,6 @@ impl Parse for FieldContent {
             .parse_next(input)?;
         Ok(field_content)
     }
-    // fn parse(i: &[u8]) -> nom::IResult<&[u8], Self>
-    // where
-    //     Self: std::marker::Sized,
-    // {
-    //     // The field-content does not include any leading or trailing LWS
-    //     map(until_space1, |field_content| {
-    //         FieldContent(field_content.to_vec())
-    //     })
-    //     .parse(i)
-    // }
 }
 //
 // impl Parse for FieldValue {
@@ -157,22 +147,24 @@ mod test {
         assert_eq!(p.complete_buffer(), b": 3\r\n");
         Ok(())
     }
-    //
-    //     #[test]
-    //     fn test_parse_field_content() -> Result<()> {
-    //         let mut p = TestParserStream::init(b"ab\r\n");
-    //         let field_content: FieldContent = p.parse()?;
-    //         assert_eq!(field_content, FieldContent(b"ab".to_vec()));
-    //         Ok(())
-    //     }
-    //
-    //     #[test]
-    //     fn test_parse_field_content_trailing() -> Result<()> {
-    //         let mut p = TestParserStream::init(b"ab ");
-    //         let field_content: FieldContent = p.parse()?;
-    //         assert_eq!(field_content, FieldContent(b"ab".to_vec()));
-    //         Ok(())
-    //     }
+
+    #[test]
+    fn test_field_content() -> Result<()> {
+        let mut p = StreamParser::new(&b"ab"[..]);
+        let field_name: FieldContent = p.parse()?;
+        assert_eq!(field_name, FieldContent(b"ab".to_vec()));
+        assert_eq!(p.complete_buffer(), b"");
+        Ok(())
+    }
+
+    #[test]
+    fn test_field_content_trailing() -> Result<()> {
+        let mut p = StreamParser::new(&b"ab "[..]);
+        let field_name: FieldContent = p.parse()?;
+        assert_eq!(field_name, FieldContent(b"ab".to_vec()));
+        assert_eq!(p.complete_buffer(), b" ");
+        Ok(())
+    }
     //
     //     #[test]
     //     fn test_parse_field_value() -> Result<()> {

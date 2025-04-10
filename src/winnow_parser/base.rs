@@ -68,7 +68,6 @@ impl<R: Read> StreamParser<R> {
                         break self.parse_complete();
                     }
                     self.buffer.extend_from_slice(&buffer[..n]);
-                    dbg!(&self.buffer);
                 }
                 Err(e) => todo!("{}", e),
             }
@@ -87,7 +86,7 @@ impl<R: Read> StreamParser<R> {
                 self.buffer = self.buffer.split_off(consumed);
                 Ok(out)
             }
-            Err(_) => bail!("unexpected eof"),
+            Err(e) => bail!("unexpected eof, `{}`", e),
         }
     }
 }
