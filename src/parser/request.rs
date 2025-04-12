@@ -1,7 +1,9 @@
+use std::str;
+
 use winnow::{
     ascii::{alpha1, crlf, space0, Caseless},
-    combinator::{alt, repeat, seq, terminated},
-    token::take_till,
+    combinator::{alt, empty, repeat, seq, terminated},
+    token::{take, take_till},
     Parser,
 };
 
@@ -73,21 +75,31 @@ impl Parse for Request {
         I: super::base::Convertible<'i>,
         I::Token: winnow::stream::AsChar,
     {
-        let request = seq! {
+        let mut request: Request = seq! {
             Request {
                 request_line: RequestLine::parse,
                 headers: repeat(0.., terminated(MessageHeader::parse, crlf)),
                 _: crlf,
-                body: MessageBody::parse.map(|body| {
-                    if !body.0.is_empty() {
-                        Some(body)
-                    } else {
-                        None
-                    }
-                }),
+                body: empty.map(|_| None),
             }
         }
         .parse_next(input)?;
+
+        // whether we should read body
+        request.body = match request.first_value_content(b"Content-Length") {
+            Some(content_length) => {
+                if let Ok(Ok(value)) =
+                    str::from_utf8(&content_length.0.to_vec()).map(|s| s.parse::<u32>())
+                {
+                    let body = take(value).parse_next(input)?;
+                    Some(MessageBody(body.to_vec()))
+                } else {
+                    None
+                }
+            }
+            None => None,
+        };
+
         Ok(request)
     }
 }
@@ -168,56 +180,6 @@ mod test {
     );
 
     test_parse_ok!(
-        request,
-        b"GET /user-agent HTTP/2.0\r
-Host: localhost:4221\r
-User-Agent: foobar/1.2.3\r
-Accept: */*\r
-\r
-message body1
-message body2",
-        Request {
-            request_line: RequestLine {
-                method: Method::Get,
-                request_uri: RequestURI(b"/user-agent".to_vec()),
-                http_version: HttpVersion { major: 2, minor: 0 },
-            },
-            headers: vec![
-                MessageHeader {
-                    field_name: FieldName(b"Host".to_vec()),
-                    field_value: Some(FieldValue(vec![FieldContent(b"localhost:4221".to_vec())])),
-                },
-                MessageHeader {
-                    field_name: FieldName(b"User-Agent".to_vec()),
-                    field_value: Some(FieldValue(vec![FieldContent(b"foobar/1.2.3".to_vec())])),
-                },
-                MessageHeader {
-                    field_name: FieldName(b"Accept".to_vec()),
-                    field_value: Some(FieldValue(vec![FieldContent(b"*/*".to_vec())])),
-                },
-            ],
-            body: Some(MessageBody(b"message body1\nmessage body2".to_vec())),
-        },
-        b""
-    );
-    test_parse_ok!(
-        request_no_header,
-        b"GET /user-agent HTTP/2.0\r
-\r
-message body1
-message body2",
-        Request {
-            request_line: RequestLine {
-                method: Method::Get,
-                request_uri: RequestURI(b"/user-agent".to_vec()),
-                http_version: HttpVersion { major: 2, minor: 0 },
-            },
-            headers: vec![],
-            body: Some(MessageBody(b"message body1\nmessage body2".to_vec())),
-        },
-        b""
-    );
-    test_parse_ok!(
         request_no_body,
         b"GET /user-agent HTTP/2.0\r
 Host: localhost:4221\r
@@ -250,6 +212,59 @@ Accept: */*\r
         b""
     );
     test_parse_ok!(
+        request_no_header,
+        b"GET /user-agent HTTP/2.0\r
+\r
+",
+        Request {
+            request_line: RequestLine {
+                method: Method::Get,
+                request_uri: RequestURI(b"/user-agent".to_vec()),
+                http_version: HttpVersion { major: 2, minor: 0 },
+            },
+            headers: vec![],
+            body: None,
+        },
+        b""
+    );
+    test_parse_ok!(
+        request_with_body,
+        b"GET /user-agent HTTP/2.0\r
+Host: localhost:4221\r
+User-Agent: foobar/1.2.3\r
+Accept: */*\r
+Content-Length: 10\r
+\r
+0123456789",
+        Request {
+            request_line: RequestLine {
+                method: Method::Get,
+                request_uri: RequestURI(b"/user-agent".to_vec()),
+                http_version: HttpVersion { major: 2, minor: 0 },
+            },
+            headers: vec![
+                MessageHeader {
+                    field_name: FieldName(b"Host".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"localhost:4221".to_vec())])),
+                },
+                MessageHeader {
+                    field_name: FieldName(b"User-Agent".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"foobar/1.2.3".to_vec())])),
+                },
+                MessageHeader {
+                    field_name: FieldName(b"Accept".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"*/*".to_vec())])),
+                },
+                MessageHeader {
+                    field_name: FieldName(b"Content-Length".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"10".to_vec())])),
+                },
+            ],
+            body: Some(MessageBody(b"0123456789".into())),
+        },
+        b""
+    );
+    test_parse_ok!(
         request_no_header_and_body,
         b"GET /user-agent HTTP/2.0\r
 \r
@@ -264,5 +279,37 @@ Accept: */*\r
             body: None,
         },
         b""
+    );
+    test_parse_ok!(
+        request_with_body_no_content_length,
+        b"GET /user-agent HTTP/2.0\r
+Host: localhost:4221\r
+User-Agent: foobar/1.2.3\r
+Accept: */*\r
+\r
+0123456789",
+        Request {
+            request_line: RequestLine {
+                method: Method::Get,
+                request_uri: RequestURI(b"/user-agent".to_vec()),
+                http_version: HttpVersion { major: 2, minor: 0 },
+            },
+            headers: vec![
+                MessageHeader {
+                    field_name: FieldName(b"Host".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"localhost:4221".to_vec())])),
+                },
+                MessageHeader {
+                    field_name: FieldName(b"User-Agent".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"foobar/1.2.3".to_vec())])),
+                },
+                MessageHeader {
+                    field_name: FieldName(b"Accept".to_vec()),
+                    field_value: Some(FieldValue(vec![FieldContent(b"*/*".to_vec())])),
+                },
+            ],
+            body: None,
+        },
+        b"0123456789"
     );
 }

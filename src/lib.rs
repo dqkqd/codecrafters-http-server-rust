@@ -19,13 +19,9 @@ pub fn handle_request(request: Request) -> Result<Response> {
         Route::Root => (Status::OK, None),
         Route::Echo { command } if !command.is_empty() => (Status::OK, Some(MessageBody(command))),
         Route::UserAgent => {
-            let user_agent = request
-                .find_header(b"User-Agent")
-                .and_then(|header| header.field_value.as_ref())
-                .and_then(|field_value| field_value.0.first())
-                .map(|field_content| field_content.0.to_vec());
+            let user_agent = request.first_value_content(b"User-Agent");
             match user_agent {
-                Some(user_agent) => (Status::OK, Some(MessageBody(user_agent))),
+                Some(user_agent) => (Status::OK, Some(MessageBody(user_agent.0))),
                 None => (Status::NotFound, None),
             }
         }

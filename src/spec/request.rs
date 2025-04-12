@@ -1,5 +1,5 @@
 use super::{
-    message::{MessageBody, MessageHeader},
+    message::{FieldContent, FieldName, MessageBody, MessageHeader},
     protocol::HttpVersion,
 };
 
@@ -28,6 +28,17 @@ pub struct Request {
 
 impl Request {
     pub(crate) fn find_header(&self, header: &[u8]) -> Option<&MessageHeader> {
-        self.headers.iter().find(|h| h.field_name.0 == header)
+        self.headers
+            .iter()
+            .rev()
+            .find(|h| h.field_name == FieldName(header.into()))
+    }
+
+    pub(crate) fn first_value_content(&self, header: &[u8]) -> Option<FieldContent> {
+        self.find_header(header)
+            .and_then(|header| header.field_value.as_ref())
+            .and_then(|field_value| field_value.0.first())
+            .map(|field_content| field_content.0.to_vec())
+            .map(FieldContent)
     }
 }
