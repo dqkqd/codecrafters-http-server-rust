@@ -8,7 +8,7 @@ use winnow::{
     ModalResult, Partial,
 };
 
-pub(crate) trait Convertible<'i>:
+pub trait Convertible<'i>:
     Stream<Slice = &'i [u8]>
     + Compare<&'static str>
     + Compare<Caseless<&'static str>>
@@ -32,7 +32,7 @@ where
 {
 }
 
-pub(crate) trait Parse {
+pub trait Parse {
     fn parse<'i, I>(input: &mut I) -> ModalResult<Self>
     where
         Self: std::marker::Sized,
@@ -41,7 +41,7 @@ pub(crate) trait Parse {
 }
 
 #[derive(Debug)]
-pub(crate) struct StreamParser<R: Read> {
+pub struct StreamParser<R: Read> {
     reader: BufReader<R>,
     pub buffer: Vec<u8>,
 }
@@ -59,6 +59,7 @@ impl<R: Read> StreamParser<R> {
         T: Parse + std::fmt::Debug,
     {
         let mut buffer = [0; 4096];
+
         loop {
             let mut partial = Partial::new(self.buffer.as_slice());
             let start = partial.checkpoint();
@@ -70,12 +71,13 @@ impl<R: Read> StreamParser<R> {
                 }
 
                 Err(ErrMode::Incomplete(_)) => {
-                    let n = self.reader.read(&mut buffer)?;
+                    let n = self.reader.read(&mut buffer).unwrap_or_default();
                     if n == 0 {
                         break self.parse_complete();
                     }
                     self.buffer.extend_from_slice(&buffer[..n]);
                 }
+
                 Err(e) => todo!("{}", e),
             }
         }

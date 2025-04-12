@@ -2,5 +2,7 @@
 mod base;
 mod message;
 mod protocol;
-mod request;
+pub mod request;
 mod util;
+
+pub use base::{Parse, StreamParser};

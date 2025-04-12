@@ -1,14 +1,10 @@
 use std::{
-    io::BufReader,
     net::{TcpListener, TcpStream},
+    time::Duration,
 };
 
 use anyhow::Result;
-use codecrafters_http_server::{
-    request::{RequestLine, RequestMethod},
-    response::{HttpResponse, HttpStatus},
-    routes::Route,
-};
+use codecrafters_http_server::parser::{request::Request, StreamParser};
 
 fn main() -> Result<()> {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -21,6 +17,7 @@ fn main() -> Result<()> {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
+                stream.set_read_timeout(Some(Duration::from_millis(100)))?;
                 handle_stream(stream)?;
             }
             Err(e) => {
@@ -32,16 +29,25 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn handle_stream(mut stream: TcpStream) -> Result<()> {
-    let mut reader = BufReader::new(&stream);
-    let request_line = RequestLine::parse(&mut reader)?;
-
-    let response = match (request_line.method, request_line.route) {
-        (RequestMethod::Get, Route::Root) => HttpResponse::new(HttpStatus::Ok),
-        (RequestMethod::Get, Route::Echo { command }) => {
-            HttpResponse::new(HttpStatus::Ok).with_text_response(&command)
+fn handle_stream(stream: TcpStream) -> Result<()> {
+    // let mut reader = BufReader::new(&stream);
+    let mut parser = StreamParser::new(&stream);
+    match parser.parse::<Request>() {
+        Ok(request) => {
+            dbg!(request);
         }
-        _ => HttpResponse::new(HttpStatus::NotFound),
-    };
-    response.output(&mut stream)
+        Err(_) => todo!(),
+    }
+
+    // let request_line = RequestLine::parse(&mut reader)?;
+    //
+    // let response = match (request_line.method, request_line.route) {
+    //     (RequestMethod::Get, Route::Root) => HttpResponse::new(HttpStatus::Ok),
+    //     (RequestMethod::Get, Route::Echo { command }) => {
+    //         HttpResponse::new(HttpStatus::Ok).with_text_response(&command)
+    //     }
+    //     _ => HttpResponse::new(HttpStatus::NotFound),
+    // };
+    // response.output(&mut stream)
+    todo!()
 }
