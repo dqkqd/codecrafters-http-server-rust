@@ -6,8 +6,7 @@ use std::{
 
 use anyhow::Result;
 use codecrafters_http_server::{
-    bytes::ToBytes, handle_request, parser::StreamParser, parser::StreamReader,
-    spec::request::Request,
+    bytes::ToBytes, handle_request, parser::StreamParser, spec::request::Request,
 };
 
 fn main() -> Result<()> {
@@ -33,8 +32,7 @@ fn handle_stream(mut stream: TcpStream) -> Result<()> {
         .set_nonblocking(true)
         .expect("cannot set listener as unblocking");
 
-    let reader = StreamReader::new(&stream);
-    let mut parser = StreamParser::new(reader);
+    let mut parser = StreamParser::new(&stream);
     match parser.parse::<Request>() {
         Ok(request) => {
             let response = handle_request(request)?;

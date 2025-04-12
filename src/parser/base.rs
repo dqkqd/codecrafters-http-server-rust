@@ -1,6 +1,7 @@
 use std::{
-    io::{BufReader, Read},
-    net::TcpStream,
+    io::{BufReader, ErrorKind, Read},
+    thread,
+    time::Duration,
 };
 
 use anyhow::{bail, Result};
@@ -52,34 +53,15 @@ pub trait Parse {
 }
 
 #[derive(Debug)]
-pub struct StreamReader<'a> {
-    reader: BufReader<&'a TcpStream>,
-}
-
-#[derive(Debug)]
 pub struct StreamParser<R: Read> {
-    reader: R,
+    reader: BufReader<R>,
     pub buffer: Vec<u8>,
-}
-
-impl StreamReader<'_> {
-    pub fn new(stream: &TcpStream) -> StreamReader {
-        StreamReader {
-            reader: BufReader::new(stream),
-        }
-    }
-}
-
-impl Read for StreamReader<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.reader.read(buf)
-    }
 }
 
 impl<R: Read> StreamParser<R> {
     pub fn new(reader: R) -> StreamParser<R> {
         StreamParser {
-            reader,
+            reader: BufReader::new(reader),
             buffer: vec![],
         }
     }
@@ -101,7 +83,17 @@ impl<R: Read> StreamParser<R> {
                 }
 
                 Err(ErrMode::Incomplete(_)) => {
-                    let n = self.reader.read(&mut buffer).unwrap_or_default();
+                    let n = match self.reader.read(&mut buffer) {
+                        Ok(n) => n,
+                        Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(100));
+                            continue;
+                        }
+                        Err(e) => {
+                            dbg!(e);
+                            0
+                        }
+                    };
                     if n == 0 {
                         break self.parse_complete();
                     }
