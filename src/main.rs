@@ -28,10 +28,6 @@ fn main() -> Result<()> {
 }
 
 fn handle_stream(mut stream: TcpStream) -> Result<()> {
-    stream
-        .set_nonblocking(true)
-        .expect("cannot set listener as unblocking");
-
     let mut parser = StreamParser::new(&stream);
     match parser.parse::<Request>() {
         Ok(request) => {
