@@ -6,24 +6,12 @@ use winnow::{
     Parser,
 };
 
-use crate::parser::util::is_space;
+use crate::{
+    parser::util::is_space,
+    spec::message::{FieldContent, FieldName, FieldValue, MessageBody, MessageHeader},
+};
 
 use super::base::Parse;
-
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct MessageHeader {
-    pub field_name: FieldName,
-    pub field_value: Option<FieldValue>,
-}
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct FieldName(pub Vec<u8>);
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct FieldValue(pub Vec<FieldContent>);
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct FieldContent(pub Vec<u8>);
-
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct MessageBody(pub Vec<u8>);
 
 impl Parse for FieldName {
     fn parse<'i, I>(input: &mut I) -> winnow::ModalResult<Self>
@@ -121,7 +109,6 @@ mod test {
     use crate::{test_parse_error, test_parse_ok};
 
     use super::*;
-    
 
     test_parse_ok!(
         field_name,

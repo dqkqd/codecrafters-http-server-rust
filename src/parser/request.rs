@@ -5,35 +5,13 @@ use winnow::{
     Parser,
 };
 
-use super::{
-    base::Parse,
+use crate::spec::{
     message::{MessageBody, MessageHeader},
     protocol::HttpVersion,
-    util::is_space,
+    request::{Method, Request, RequestLine, RequestURI},
 };
 
-#[derive(Debug, PartialEq, Eq)]
-pub(super) enum Method {
-    Get,
-    ExtensionMethod(Vec<u8>),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct RequestURI(Vec<u8>);
-
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct RequestLine {
-    method: Method,
-    request_uri: RequestURI,
-    http_version: HttpVersion,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct Request {
-    request_line: RequestLine,
-    headers: Vec<MessageHeader>,
-    body: Option<MessageBody>,
-}
+use super::{base::Parse, util::is_space};
 
 impl Parse for Method {
     fn parse<'i, I>(input: &mut I) -> winnow::ModalResult<Self>
@@ -117,8 +95,8 @@ impl Parse for Request {
 #[cfg(test)]
 mod test {
     use crate::{
+        spec::message::{FieldContent, FieldName, FieldValue},
         test_parse_ok,
-        parser::message::{FieldContent, FieldName, FieldValue},
     };
 
     use super::*;

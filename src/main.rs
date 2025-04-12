@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::Result;
-use codecrafters_http_server::parser::{request::Request, StreamParser};
+use codecrafters_http_server::{parser::StreamParser, spec::request::Request};
 
 fn main() -> Result<()> {
     // You can use print statements as follows for debugging, they'll be visible when running tests.

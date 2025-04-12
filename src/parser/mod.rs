@@ -1,4 +1,3 @@
-// mod response;
 mod base;
 mod message;
 mod protocol;

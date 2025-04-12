@@ -2,13 +2,9 @@ use std::str;
 
 use winnow::{ascii::digit1, combinator::seq, Parser};
 
-use super::base::Parse;
+use crate::spec::protocol::HttpVersion;
 
-#[derive(Debug, PartialEq, Eq)]
-pub(super) struct HttpVersion {
-    pub major: u32,
-    pub minor: u32,
-}
+use super::base::Parse;
 
 impl Parse for HttpVersion {
     fn parse<'i, I>(input: &mut I) -> winnow::ModalResult<Self>

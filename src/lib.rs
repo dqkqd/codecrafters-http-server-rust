@@ -2,6 +2,7 @@ pub mod parser;
 pub mod request;
 pub mod response;
 pub mod routes;
+pub mod spec;
 
 use anyhow::Result;
 use std::io::BufRead;
