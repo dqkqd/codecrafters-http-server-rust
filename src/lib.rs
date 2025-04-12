@@ -13,7 +13,7 @@ use anyhow::Result;
 use parser::Parse;
 use routes::Route;
 use spec::{
-    message::{MessageBody, MessageHeader},
+    message::{FieldContent, MessageBody, MessageHeader},
     request::{Method, Request},
     response::{Response, Status, StatusLine},
 };
@@ -31,10 +31,17 @@ pub fn handle_request(cli: Cli, request: Request) -> Result<Response> {
         Method::Get => match route {
             Route::Root => (Status::OK, vec![], None),
             Route::Echo { command } if !command.is_empty() => {
-                let headers = vec![
+                let mut headers = vec![
                     MessageHeader::convert("Content-Type: text/plain")?,
                     MessageHeader::convert(&format!("Content-Length: {}", command.len()))?,
                 ];
+                if let Some(FieldContent(accept_encoding)) =
+                    request.first_value_content(b"Accept-Encoding")
+                {
+                    if accept_encoding == b"gzip" {
+                        headers.push(MessageHeader::convert("Content-Encoding: gzip")?)
+                    }
+                }
                 (Status::OK, headers, Some(MessageBody(command)))
             }
             Route::UserAgent => {
