@@ -1,7 +1,6 @@
 use std::{
     io::{BufReader, Read},
     net::TcpStream,
-    time::Duration,
 };
 
 use anyhow::{bail, Result};
@@ -73,12 +72,7 @@ impl StreamReader<'_> {
 
 impl Read for StreamReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.reader
-            .get_ref()
-            .set_read_timeout(Some(Duration::from_millis(100)))?;
-        let n = self.reader.read(buf);
-        self.reader.get_ref().set_read_timeout(None)?;
-        n
+        self.reader.read(buf)
     }
 }
 
