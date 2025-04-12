@@ -25,3 +25,9 @@ pub struct Request {
     pub(crate) headers: Vec<MessageHeader>,
     pub(crate) body: Option<MessageBody>,
 }
+
+impl Request {
+    pub(crate) fn find_header(&self, header: &[u8]) -> Option<&MessageHeader> {
+        self.headers.iter().find(|h| h.field_name.0 == header)
+    }
+}

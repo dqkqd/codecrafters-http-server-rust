@@ -1,19 +1,60 @@
-#[derive(Debug)]
-pub enum Route {
-    Echo { command: String },
+use crate::spec::request::RequestURI;
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Route {
+    Echo { command: Vec<u8> },
+    UserAgent,
     Root,
     Unknown,
 }
 
-impl From<&str> for Route {
-    fn from(value: &str) -> Route {
-        let components = value.split('/').skip(1).collect::<Vec<_>>();
-        match components.first() {
-            Some(&"") => Route::Root,
-            Some(&"echo") => Route::Echo {
-                command: components[1..].join("/").to_string(),
+impl From<&RequestURI> for Route {
+    fn from(value: &RequestURI) -> Self {
+        let mut components = value.0.split(|v| v == &b'/').skip(1);
+        match components.next() {
+            Some(b"") => Route::Root,
+            Some(b"echo") => Route::Echo {
+                command: components.flatten().cloned().collect(),
             },
+            Some(b"user-agent") => Route::UserAgent,
             _ => Route::Unknown,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::spec::request::RequestURI;
+
+    #[test]
+    fn root() {
+        assert_eq!(Route::from(&RequestURI(b"/".into())), Route::Root);
+    }
+
+    #[test]
+    fn echo() {
+        assert_eq!(
+            Route::from(&RequestURI(b"/echo/something".into())),
+            Route::Echo {
+                command: b"something".into()
+            }
+        );
+    }
+
+    #[test]
+    fn user_agent() {
+        assert_eq!(
+            Route::from(&RequestURI(b"/user-agent".into())),
+            Route::UserAgent,
+        );
+    }
+
+    #[test]
+    fn unknown() {
+        assert_eq!(
+            Route::from(&RequestURI(b"/something".into())),
+            Route::Unknown
+        );
     }
 }

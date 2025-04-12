@@ -38,6 +38,14 @@ pub trait Parse {
         Self: std::marker::Sized,
         I: Convertible<'i>,
         I::Token: AsChar;
+
+    fn convert(b: &str) -> Result<Self>
+    where
+        Self: std::marker::Sized,
+        Self: std::fmt::Debug,
+    {
+        StreamParser::new(b.as_bytes()).parse()
+    }
 }
 
 #[derive(Debug)]
