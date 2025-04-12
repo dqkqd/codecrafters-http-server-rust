@@ -4,6 +4,7 @@ use crate::spec::request::RequestURI;
 pub(crate) enum Route {
     Echo { command: Vec<u8> },
     UserAgent,
+    Files { filename: Vec<u8> },
     Root,
     Unknown,
 }
@@ -17,6 +18,9 @@ impl From<&RequestURI> for Route {
                 command: components.flatten().cloned().collect(),
             },
             Some(b"user-agent") => Route::UserAgent,
+            Some(b"files") => Route::Files {
+                filename: components.flatten().cloned().collect(),
+            },
             _ => Route::Unknown,
         }
     }
