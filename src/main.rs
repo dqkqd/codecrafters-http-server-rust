@@ -1,6 +1,7 @@
 use std::{
     io::Write,
     net::{TcpListener, TcpStream},
+    thread,
     time::Duration,
 };
 
@@ -18,21 +19,17 @@ fn main() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:4221").unwrap();
 
     for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                stream.set_read_timeout(Some(Duration::from_millis(100)))?;
-                handle_stream(stream)?;
-            }
-            Err(e) => {
-                println!("error: {}", e);
-            }
-        }
+        let stream = stream.unwrap();
+        thread::spawn(|| {
+            handle_stream(stream).unwrap();
+        });
     }
 
     Ok(())
 }
 
 fn handle_stream(mut stream: TcpStream) -> Result<()> {
+    stream.set_read_timeout(Some(Duration::from_millis(100)))?;
     let mut parser = StreamParser::new(&stream);
     match parser.parse::<Request>() {
         Ok(request) => {
