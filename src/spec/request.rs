@@ -3,7 +3,7 @@ use super::{
     protocol::HttpVersion,
 };
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) enum Method {
     Get,
     Post,
