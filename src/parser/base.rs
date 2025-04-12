@@ -1,4 +1,8 @@
-use std::io::{BufReader, Read};
+use std::{
+    io::{BufReader, Read},
+    net::TcpStream,
+    time::Duration,
+};
 
 use anyhow::{bail, Result};
 use winnow::{
@@ -49,15 +53,39 @@ pub trait Parse {
 }
 
 #[derive(Debug)]
+pub struct StreamReader<'a> {
+    reader: BufReader<&'a TcpStream>,
+}
+
+#[derive(Debug)]
 pub struct StreamParser<R: Read> {
-    reader: BufReader<R>,
+    reader: R,
     pub buffer: Vec<u8>,
 }
 
-impl<R: Read> StreamParser<R> {
-    pub fn new(stream: R) -> StreamParser<R> {
-        StreamParser {
+impl StreamReader<'_> {
+    pub fn new(stream: &TcpStream) -> StreamReader {
+        StreamReader {
             reader: BufReader::new(stream),
+        }
+    }
+}
+
+impl Read for StreamReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.reader
+            .get_ref()
+            .set_read_timeout(Some(Duration::from_millis(100)))?;
+        let n = self.reader.read(buf);
+        self.reader.get_ref().set_read_timeout(None)?;
+        n
+    }
+}
+
+impl<R: Read> StreamParser<R> {
+    pub fn new(reader: R) -> StreamParser<R> {
+        StreamParser {
+            reader,
             buffer: vec![],
         }
     }

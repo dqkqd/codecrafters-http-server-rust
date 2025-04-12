@@ -2,12 +2,12 @@ use std::{
     io::Write,
     net::{TcpListener, TcpStream},
     thread,
-    time::Duration,
 };
 
 use anyhow::Result;
 use codecrafters_http_server::{
-    bytes::ToBytes, handle_request, parser::StreamParser, spec::request::Request,
+    bytes::ToBytes, handle_request, parser::StreamParser, parser::StreamReader,
+    spec::request::Request,
 };
 
 fn main() -> Result<()> {
@@ -29,8 +29,8 @@ fn main() -> Result<()> {
 }
 
 fn handle_stream(mut stream: TcpStream) -> Result<()> {
-    stream.set_read_timeout(Some(Duration::from_millis(100)))?;
-    let mut parser = StreamParser::new(&stream);
+    let reader = StreamReader::new(&stream);
+    let mut parser = StreamParser::new(reader);
     match parser.parse::<Request>() {
         Ok(request) => {
             let response = handle_request(request)?;
