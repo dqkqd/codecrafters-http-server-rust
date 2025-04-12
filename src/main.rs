@@ -6,10 +6,7 @@ use std::{
 
 use anyhow::Result;
 use codecrafters_http_server::{
-    bytes::ToBytes,
-    handle_request,
-    parser::StreamParser,
-    spec::request::Request,
+    bytes::ToBytes, handle_request, parser::StreamParser, spec::request::Request,
 };
 
 fn main() -> Result<()> {
@@ -44,7 +41,7 @@ fn handle_stream(mut stream: TcpStream) -> Result<()> {
             eprintln!("{}", String::from_utf8(bytes.clone()).unwrap());
             stream.write_all(&bytes)?;
         }
-        Err(_) => todo!(),
+        Err(e) => println!("{}", e),
     }
     Ok(())
 }
