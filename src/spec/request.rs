@@ -6,7 +6,8 @@ use super::{
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Method {
     Get,
-    ExtensionMethod(Vec<u8>),
+    Post,
+    Extension(Vec<u8>),
 }
 
 #[derive(Debug, PartialEq, Eq)]

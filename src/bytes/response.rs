@@ -57,6 +57,11 @@ mod test {
     }
 
     #[test]
+    fn status_201() {
+        assert_eq!(Status::Created.into_bytes(), b"201 Created");
+    }
+
+    #[test]
     fn status_404() {
         assert_eq!(Status::NotFound.into_bytes(), b"404 Not Found");
     }

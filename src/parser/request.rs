@@ -24,7 +24,8 @@ impl Parse for Method {
     {
         let method: Method = alt((
             Caseless("get").map(|_| Method::Get),
-            alpha1.map(|m: &[u8]| Method::ExtensionMethod(m.to_vec())),
+            Caseless("post").map(|_| Method::Post),
+            alpha1.map(|m: &[u8]| Method::Extension(m.to_vec())),
         ))
         .parse_next(input)?;
         Ok(method)
@@ -116,16 +117,19 @@ mod test {
     test_parse_ok!(get, b"get", Method::Get, b"");
     test_parse_ok!(get_case, b"Get", Method::Get, b"");
     test_parse_ok!(get_trailing, b"get ", Method::Get, b" ");
+    test_parse_ok!(post, b"post", Method::Post, b"");
+    test_parse_ok!(post_case, b"Post", Method::Post, b"");
+    test_parse_ok!(post_trailing, b"post ", Method::Post, b" ");
     test_parse_ok!(
         get_extension,
         b"Something",
-        Method::ExtensionMethod(b"Something".to_vec()),
+        Method::Extension(b"Something".to_vec()),
         b""
     );
     test_parse_ok!(
         get_extension_trailing,
         b"Something ",
-        Method::ExtensionMethod(b"Something".to_vec()),
+        Method::Extension(b"Something".to_vec()),
         b" "
     );
 

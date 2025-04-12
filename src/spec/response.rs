@@ -1,4 +1,3 @@
-
 use super::{
     message::{MessageBody, MessageHeader},
     protocol::HttpVersion,
@@ -7,6 +6,7 @@ use super::{
 #[derive(Debug)]
 pub(crate) enum Status {
     OK,
+    Created,
     NotFound,
 }
 
@@ -27,12 +27,14 @@ impl Status {
     pub fn code(&self) -> u16 {
         match self {
             Status::OK => 200,
+            Status::Created => 201,
             Status::NotFound => 404,
         }
     }
     pub fn reason_phrase(&self) -> &'static str {
         match self {
             Status::OK => "OK",
+            Status::Created => "Created",
             Status::NotFound => "Not Found",
         }
     }
