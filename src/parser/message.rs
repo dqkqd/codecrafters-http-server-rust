@@ -1,6 +1,7 @@
 use winnow::{
     ascii::{space0, space1},
-    combinator::{alt, preceded, separated, seq},
+    combinator::{alt, fail, peek, preceded, separated, seq},
+    error::ContextError,
     stream::AsChar,
     token::{rest, take_till, take_until, take_while},
     Parser,
@@ -71,6 +72,14 @@ impl Parse for MessageHeader {
         I: super::base::Convertible<'i>,
         I::Token: AsChar,
     {
+        let _ = space0(input)?;
+        if peek::<I, &'i [u8], ContextError, &str>("\r\n")
+            .parse_next(input)
+            .is_ok()
+        {
+            fail.parse_next(input)?;
+        }
+
         let message_header = seq! {
             MessageHeader {
                 field_name: FieldName::parse,

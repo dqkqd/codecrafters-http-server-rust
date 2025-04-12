@@ -100,7 +100,7 @@ impl<R: Read> StreamParser<R> {
                     self.buffer.extend_from_slice(&buffer[..n]);
                 }
 
-                Err(e) => todo!("{}", e),
+                Err(e) => bail!("error {e}"),
             }
         }
     }
