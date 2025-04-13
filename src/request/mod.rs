@@ -1,14 +1,17 @@
-use std::{io::Write, path::PathBuf};
-
-use crate::spec::{
-    message::{FieldContent, FieldName, FieldValue, MessageBody, MessageHeader},
-    request::{Method, Request as RawRequest},
-    response::{Response, Status, StatusLine},
-};
-
 mod routes;
 
 use flate2::{write::GzEncoder, Compression};
+use std::{io::Write, path::PathBuf};
+
+use crate::{
+    bytes::ToBytes,
+    spec::{
+        message::{FieldContent, FieldName, FieldValue, MessageBody, MessageHeader},
+        request::{Method, Request as RawRequest},
+        response::{Response, Status, StatusLine},
+    },
+    ServerResponse,
+};
 pub(crate) use routes::Route;
 
 pub(super) type AdditionalHeader = Vec<(String, String)>;
@@ -61,7 +64,7 @@ impl Handler {
         }
     }
 
-    pub fn process(mut self) -> Response {
+    pub fn process(mut self) -> ServerResponse {
         let route = Route::from(&self.request.inner.request_line.request_uri);
 
         if let Some(accept_encoding) = self.request.inner.find_value(b"Accept-Encoding") {
@@ -102,7 +105,13 @@ impl Handler {
             self.add_response_header("Content-Length", &body.0.len().to_string());
         }
 
-        self.response
+        if let Some(close) = self.request.inner.find_value(b"Connection") {
+            if close == b"close" {
+                self.add_response_header("Connection", "close");
+                return ServerResponse::Close(self.response.into_bytes());
+            }
+        }
+        ServerResponse::Continue(self.response.into_bytes())
     }
 
     fn add_response_header(&mut self, header: &str, content: &str) {

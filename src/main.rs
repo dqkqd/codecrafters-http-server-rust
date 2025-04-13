@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use clap::Parser;
 use codecrafters_http_server::{
-    bytes::ToBytes, handle_request, parser::StreamParser, Cli, Request,
+    handle_request, parser::StreamParser, Cli, Request, ServerResponse,
 };
 
 fn main() -> Result<()> {
@@ -36,9 +36,11 @@ fn handle_stream(cli: Cli, mut stream: TcpStream) -> Result<()> {
         let mut parser = StreamParser::new(&stream);
         match parser.parse::<Request>() {
             Ok(request) => {
-                let response = handle_request(cli.clone(), request);
-                let bytes = response.into_bytes();
-                stream.write_all(&bytes)?;
+                let resp = handle_request(cli.clone(), request);
+                stream.write_all(resp.data())?;
+                if let ServerResponse::Close(_) = resp {
+                    break Ok(());
+                }
             }
             Err(e) => println!("{}", e),
         }
