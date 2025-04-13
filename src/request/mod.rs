@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{io::Write, path::PathBuf};
 
 use crate::spec::{
     message::{FieldContent, FieldName, FieldValue, MessageBody, MessageHeader},
@@ -8,16 +8,23 @@ use crate::spec::{
 
 mod routes;
 
-use itertools::Itertools;
+use flate2::{write::GzEncoder, Compression};
 pub(crate) use routes::Route;
-use winnow::stream::AsChar;
 
 pub(super) type AdditionalHeader = Vec<(String, String)>;
 pub(super) type AdditionalBody = Vec<u8>;
 
+#[derive(Debug, PartialEq, Eq)]
+enum Encoding {
+    Gzip,
+    Invalid,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub(super) struct Request {
     inner: RawRequest,
     cli_directory: Option<PathBuf>,
+    encoding: Vec<Encoding>,
 }
 
 pub(super) trait HandleRequest {
@@ -49,6 +56,7 @@ impl Handler {
             request: Request {
                 inner: request,
                 cli_directory,
+                encoding: vec![],
             },
         }
     }
@@ -57,12 +65,13 @@ impl Handler {
         let route = Route::from(&self.request.inner.request_line.request_uri);
 
         if let Some(accept_encoding) = self.request.inner.find_value(b"Accept-Encoding") {
-            let has_gzip = accept_encoding
+            self.request.encoding = accept_encoding
                 .split(|u| u == &b',')
-                .any(|v| v.trim_ascii() == b"gzip");
-            if has_gzip {
-                self.add_response_header("Content-Encoding", "gzip");
-            }
+                .map(|v| match v.trim_ascii() {
+                    b"gzip" => Encoding::Gzip,
+                    _ => Encoding::Invalid,
+                })
+                .collect();
         }
 
         let (status, headers, body) = route.handle(&self.request);
@@ -79,6 +88,16 @@ impl Handler {
             }
         }
 
+        if self.request.encoding.contains(&Encoding::Gzip) {
+            self.add_response_header("Content-Encoding", "gzip");
+            if let Some(MessageBody(data)) = self.response.body.as_ref() {
+                let mut e = GzEncoder::new(Vec::new(), Compression::default());
+                e.write_all(data).expect("failed to encode using gzip");
+                let body = e.finish().expect("failed to encode gzip");
+                self.response.body = Some(MessageBody(body));
+            }
+        }
+
         if let Some(body) = self.response.body.as_ref() {
             self.add_response_header("Content-Length", &body.0.len().to_string());
         }
@@ -91,6 +110,15 @@ impl Handler {
             field_name: FieldName(header.as_bytes().into()),
             field_value: Some(FieldValue(vec![FieldContent(content.as_bytes().into())])),
         };
-        self.response.headers.push(header);
+        // replace the old one
+        match self
+            .response
+            .headers
+            .iter()
+            .position(|h| h.field_name == header.field_name)
+        {
+            Some(existing_idx) => self.response.headers[existing_idx] = header,
+            None => self.response.headers.push(header),
+        }
     }
 }
