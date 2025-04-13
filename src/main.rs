@@ -32,14 +32,15 @@ fn main() -> Result<()> {
 }
 
 fn handle_stream(cli: Cli, mut stream: TcpStream) -> Result<()> {
-    let mut parser = StreamParser::new(&stream);
-    match parser.parse::<Request>() {
-        Ok(request) => {
-            let response = handle_request(cli, request);
-            let bytes = response.into_bytes();
-            stream.write_all(&bytes)?;
+    loop {
+        let mut parser = StreamParser::new(&stream);
+        match parser.parse::<Request>() {
+            Ok(request) => {
+                let response = handle_request(cli.clone(), request);
+                let bytes = response.into_bytes();
+                stream.write_all(&bytes)?;
+            }
+            Err(e) => println!("{}", e),
         }
-        Err(e) => println!("{}", e),
     }
-    Ok(())
 }
