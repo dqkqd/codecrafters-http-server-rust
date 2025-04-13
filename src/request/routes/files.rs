@@ -38,10 +38,7 @@ impl HandleRequest for Files {
 
                     (
                         Some(Status::OK),
-                        vec![
-                            ("Content-Type".into(), "application/octet-stream".into()),
-                            ("Content-Length".into(), content.len().to_string()),
-                        ],
+                        vec![("Content-Type".into(), "application/octet-stream".into())],
                         content,
                     )
                 } else {

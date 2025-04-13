@@ -20,10 +20,7 @@ impl HandleRequest for Echo {
         match request.method() {
             Method::Get => (
                 Some(Status::OK),
-                vec![
-                    ("Content-Type".into(), "text/plain".into()),
-                    ("Content-Length".into(), self.command.len().to_string()),
-                ],
+                vec![("Content-Type".into(), "text/plain".into())],
                 self.command.to_vec(),
             ),
             _ => (None, vec![], vec![]),

@@ -19,10 +19,7 @@ impl HandleRequest for UserAgent {
             Method::Get => match request.inner.find_value(b"User-Agent") {
                 Some(user_agent) => (
                     Some(Status::OK),
-                    vec![
-                        ("Content-Type".into(), "text/plain".into()),
-                        ("Content-Length".into(), user_agent.len().to_string()),
-                    ],
+                    vec![("Content-Type".into(), "text/plain".into())],
                     user_agent,
                 ),
                 None => (None, vec![], vec![]),

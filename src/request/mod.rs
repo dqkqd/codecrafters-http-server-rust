@@ -79,6 +79,10 @@ impl Handler {
             }
         }
 
+        if let Some(body) = self.response.body.as_ref() {
+            self.add_response_header("Content-Length", &body.0.len().to_string());
+        }
+
         self.response
     }
 
