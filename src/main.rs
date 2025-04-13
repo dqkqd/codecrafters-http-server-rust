@@ -37,7 +37,6 @@ fn handle_stream(cli: Cli, mut stream: TcpStream) -> Result<()> {
         Ok(request) => {
             let response = handle_request(cli, request);
             let bytes = response.into_bytes();
-            eprintln!("{}", String::from_utf8(bytes.clone()).unwrap());
             stream.write_all(&bytes)?;
         }
         Err(e) => println!("{}", e),
