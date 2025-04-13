@@ -87,11 +87,9 @@ impl Parse for Request {
         .parse_next(input)?;
 
         // whether we should read body
-        request.body = match request.first_value_content(b"Content-Length") {
+        request.body = match request.find_value(b"Content-Length") {
             Some(content_length) => {
-                if let Ok(Ok(value)) =
-                    str::from_utf8(&content_length.0.to_vec()).map(|s| s.parse::<u32>())
-                {
+                if let Ok(Ok(value)) = str::from_utf8(&content_length).map(|s| s.parse::<u32>()) {
                     let body = take(value).parse_next(input)?;
                     Some(MessageBody(body.to_vec()))
                 } else {

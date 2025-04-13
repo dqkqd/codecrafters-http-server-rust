@@ -8,7 +8,9 @@ use crate::spec::{
 
 mod routes;
 
+use itertools::Itertools;
 pub(crate) use routes::Route;
+use winnow::stream::AsChar;
 
 pub(super) type AdditionalHeader = Vec<(String, String)>;
 pub(super) type AdditionalBody = Vec<u8>;
@@ -54,10 +56,11 @@ impl Handler {
     pub fn process(mut self) -> Response {
         let route = Route::from(&self.request.inner.request_line.request_uri);
 
-        if let Some(FieldContent(accept_encoding)) =
-            self.request.inner.first_value_content(b"Accept-Encoding")
-        {
-            if accept_encoding == b"gzip" {
+        if let Some(accept_encoding) = self.request.inner.find_value(b"Accept-Encoding") {
+            let has_gzip = accept_encoding
+                .split(|u| u == &b',')
+                .any(|v| v.trim_ascii() == b"gzip");
+            if has_gzip {
                 self.add_response_header("Content-Encoding", "gzip");
             }
         }

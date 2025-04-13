@@ -1,5 +1,7 @@
+use crate::bytes::ToBytes;
+
 use super::{
-    message::{FieldContent, FieldName, MessageBody, MessageHeader},
+    message::{FieldName, MessageBody, MessageHeader},
     protocol::HttpVersion,
 };
 
@@ -35,11 +37,9 @@ impl Request {
             .find(|h| h.field_name == FieldName(header.into()))
     }
 
-    pub(crate) fn first_value_content(&self, header: &[u8]) -> Option<FieldContent> {
+    pub(crate) fn find_value(&self, header: &[u8]) -> Option<Vec<u8>> {
         self.find_header(header)
             .and_then(|header| header.field_value.as_ref())
-            .and_then(|field_value| field_value.0.first())
-            .map(|field_content| field_content.0.to_vec())
-            .map(FieldContent)
+            .map(|field_value| field_value.clone().into_bytes())
     }
 }
